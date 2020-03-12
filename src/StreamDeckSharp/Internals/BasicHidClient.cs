@@ -6,7 +6,7 @@ namespace StreamDeckSharp.Internals
 {
     internal class BasicHidClient : IStreamDeckBoard
     {
-        private readonly byte[] keyStates;
+        private readonly bool[] keyStateData;
         private readonly object disposeLock = new object();
 
         public BasicHidClient(IStreamDeckHid deckHid, IHardwareInternalInfos hardwareInformation)
@@ -19,16 +19,18 @@ namespace StreamDeckSharp.Internals
 
             HardwareInfo = hardwareInformation;
             Buffer = new byte[deckHid.OutputReportLength];
-            keyStates = new byte[Keys.Count];
+            keyStateData = new bool[Keys.Count];
+            KeyStates = new KeyStateCollection(keyStateData);
         }
 
         public event EventHandler<KeyEventArgs> KeyStateChanged;
         public event EventHandler<ConnectionEventArgs> ConnectionStateChanged;
 
         public GridKeyPositionCollection Keys { get; }
-        IKeyPositionCollection IMacroBoard.Keys => Keys;
+        IKeyPositionCollection IMacroKeyArea.Keys => Keys;
         public bool IsDisposed { get; private set; }
         public bool IsConnected => DeckHid.IsConnected;
+        public IKeyStateCollection KeyStates { get; }
 
         protected IStreamDeckHid DeckHid { get; }
         protected IHardwareInternalInfos HardwareInfo { get; }
@@ -121,15 +123,16 @@ namespace StreamDeckSharp.Internals
 
         private void ProcessKeys(byte[] newStates)
         {
-            for (var i = 0; i < keyStates.Length; i++)
+            for (var i = 0; i < keyStateData.Length; i++)
             {
-                var newStatePos = i + HardwareInfo.KeyReportOffset;
+                var stateInReportIndex = i + HardwareInfo.KeyReportOffset;
+                var currentKeyState = newStates[stateInReportIndex] != 0;
 
-                if (keyStates[i] != newStates[newStatePos])
+                if (keyStateData[i] != currentKeyState)
                 {
                     var externalKeyId = HardwareInfo.HardwareKeyIdToExtKeyId(i);
-                    KeyStateChanged?.Invoke(this, new KeyEventArgs(externalKeyId, newStates[newStatePos] != 0));
-                    keyStates[i] = newStates[newStatePos];
+                    keyStateData[i] = currentKeyState;
+                    KeyStateChanged?.Invoke(this, new KeyEventArgs(externalKeyId, currentKeyState));
                 }
             }
         }
